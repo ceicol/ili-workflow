@@ -8,17 +8,15 @@ import boto3
 from urllib.parse import urlparse
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
-from config.general_config import XTF_OUTPUT_DIR
-
 import logging
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from config.general_config import XTF_INPUT_DIR, XTF_OUTPUT_DIR
+from config.general_config import OUTPUT_DIR
 
 
-def download_or_copy_xtf(process_id: str, source: str) -> str:
+def download_or_copy_xtf(process_id: str, source: str, etl_name:str) -> str:
     """
     Downloads or copies a .xtf file to the XTF_INPUT_DIR using the process_id as the filename.
 
@@ -28,15 +26,18 @@ def download_or_copy_xtf(process_id: str, source: str) -> str:
     Args:
         source (str): URL or local file path of the .xtf file.
         process_id (str): Identifier used to name the destination file.
+        etl_name (str): Nombre del ETL para el cual se esta gestionando la descarga
 
     Returns:
         str: Full path to the downloaded or copied .xtf file.
     """
+    etl_ouput_dir = os.path.join(OUTPUT_DIR, etl_name)
+
     # Ensure output directory exists
-    os.makedirs(XTF_INPUT_DIR, exist_ok=True)
+    os.makedirs(etl_ouput_dir, exist_ok=True)
 
     # Set target path
-    dest_path = os.path.join(XTF_INPUT_DIR, f"{process_id}.xtf")
+    dest_path = os.path.join(etl_ouput_dir, f"{process_id}.xtf")
 
     # Validate destination extension
     if not dest_path.endswith('.xtf'):
@@ -127,7 +128,7 @@ def compress_xtf_file(file_path: str) -> str:
     Compress a plan text file into a ZIP file and store it in OUTPUT_DIR.
 
     Args:
-        file_path (str): Full path to the original plan file (TXT).
+        file_path (str): Full path to the original plan file
 
     Returns:
         str: Full path to the created ZIP file.
@@ -135,12 +136,10 @@ def compress_xtf_file(file_path: str) -> str:
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"The file {file_path} does not exist.")
 
-    if not os.path.exists(XTF_OUTPUT_DIR):
-        os.makedirs(XTF_OUTPUT_DIR)
-
+    output_dir = os.path.dirname(file_path)
     file_name = os.path.basename(file_path)
     zip_file_name = os.path.splitext(file_name)[0] + ".zip"
-    zip_full_path = os.path.join(XTF_OUTPUT_DIR, zip_file_name)
+    zip_full_path = os.path.join(output_dir, zip_file_name)
 
     with zipfile.ZipFile(zip_full_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write(file_path, arcname=file_name)

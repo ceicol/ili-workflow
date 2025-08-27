@@ -1,12 +1,15 @@
 # ETL
 
 airflow/config/etl_config/*
+airflow/logic/*
 airflow/dags/*
 airflow/output/*
 airflow/logs/*
 airflow/.env
 airflow/libs/iliwrapper/*
+
 .gitmodules
+airflow/submodules/*
 
 # airflow
 airflow.cfg

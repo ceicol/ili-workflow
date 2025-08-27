@@ -2,7 +2,7 @@ import os
 import subprocess
 import logging
 
-from config.general_config import EPSG_SCRIPT, XTF_OUTPUT_DIR
+from config.general_config import EPSG_SCRIPT
 from config.ili2db_config import DbConfiguration, Ili2DbConfiguration
 
 
@@ -19,8 +19,10 @@ def exportar_xtf(ili2db_config:Ili2DbConfiguration):
     logging.info(f"Iniciando exportar_datos_ladm para {ili2db_config.MODEL_NAME}...")
     logging.info(f"Exportando datos del esquema {ili2db_config.SCHEMA_NAME} a XTF...")
 
-    if not os.path.exists(XTF_OUTPUT_DIR):
-        os.makedirs(XTF_OUTPUT_DIR)
+    output_dir = os.path.dirname(ili2db_config.XTF_PATH)
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     command = [
         "java",
