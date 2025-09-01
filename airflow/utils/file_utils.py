@@ -31,7 +31,7 @@ def download_or_copy_xtf(process_id: str, source: str, etl_name:str) -> str:
     Returns:
         str: Full path to the downloaded or copied .xtf file.
     """
-    etl_ouput_dir = os.path.join(OUTPUT_DIR, etl_name)
+    etl_ouput_dir = os.path.join(OUTPUT_DIR, etl_name, process_id)
 
     # Ensure output directory exists
     os.makedirs(etl_ouput_dir, exist_ok=True)
