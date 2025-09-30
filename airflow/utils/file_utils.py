@@ -99,7 +99,8 @@ def upload_file_to_aws_s3(
         s3_client.upload_file(
             file_path,
             bucket_name,
-            object_name
+            object_name,
+            ExtraArgs={'ACL': 'public-read'}
         )
 
         logger.info(f"File {file_path} uploaded to {bucket_name}/{object_name} successfully.")
