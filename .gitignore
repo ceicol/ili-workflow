@@ -6,6 +6,7 @@ airflow/dags/*
 airflow/output/*
 airflow/logs/*
 airflow/.env
+airflow/.configure_backups/
 airflow/libs/iliwrapper/*
 
 .gitmodules

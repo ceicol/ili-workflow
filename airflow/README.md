@@ -30,10 +30,14 @@ vi update_submodules.sh
 
 # add submodule etl AirFlow
 SUBMODULES=(
-        "https://github.com/ceicol/af_terrainfo_to_ladm.git terrainfo_to_ladm"
+        "https://github.com/ceicol/af_terrainfo_to_ladm.git terrainfo_to_ladm main"
 )
 
-sh update_submodules.sh
+# Desarrollo: crea symlinks hacia el submódulo para que los cambios se hagan en el repo del ETL.
+CONFIGURE_MODE=link bash update_submodules.sh
+
+# Materializado: sincroniza los archivos con rsync --delete.
+CONFIGURE_MODE=sync bash update_submodules.sh
 ```
 
 
@@ -91,5 +95,5 @@ docker compose -f compose.dev.yaml exec airflow-scheduler docker ps
 
 ## Despliegues de docker compose
 
-[compose con soporte para DockerOperator](compose.geodev.yaml)
-[Compose sin soporte para DockerOperator](compose.dev.yaml)
+[compose con soporte para DockerOperator](compose.geodev.yml)
+[Compose sin soporte para DockerOperator](compose.dev.yml)
