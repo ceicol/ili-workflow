@@ -4,7 +4,6 @@ IFS=$'\n\t'
 
 # Formato: nombre|URL|rama
 SUBMODULOS=(
-    "ms_to_ladm_zprn|https://github.com/ceicol/af_zprn_to_ladm.git|main"
 )
 
 log() {
