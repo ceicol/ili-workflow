@@ -1,175 +1,143 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 
-# Lista de submódulos asociados a cada ETL
-SUBMODULES=(
-    "https://github.com/ceicol/af_zprn_to_ladm.git ms_to_ladm_zprn main"
+# Formato: nombre|URL|rama
+SUBMODULOS=(
+    "ms_to_ladm_zprn|https://github.com/ceicol/af_zprn_to_ladm.git|main"
 )
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
-AIRFLOW_DIR="airflow"
-SUBMODULES_DIR="$AIRFLOW_DIR/submodules"
-CONFIGURE_MODE="${CONFIGURE_MODE:-link}"
-SUBMODULE_UPDATE_REMOTE="${SUBMODULE_UPDATE_REMOTE:-1}"
+log() {
+    local nivel="$1"
+    shift
 
-log() { printf '%s\n' "$*"; }
-warn() { printf 'WARN: %s\n' "$*" >&2; }
-abort() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-
-cd "$REPO_ROOT"
-
-has_tracked_changes() {
-    local abs_path="$1"
-
-    if ! git -C "$abs_path" diff --quiet; then
-        return 0
+    if [[ "$nivel" == "WARN" || "$nivel" == "ERROR" ]]; then
+        printf '[%s] %s\n' "$nivel" "$*" >&2
+    else
+        printf '[%s] %s\n' "$nivel" "$*"
     fi
-
-    if ! git -C "$abs_path" diff --cached --quiet; then
-        return 0
-    fi
-
-    return 1
 }
 
-is_git_worktree() {
-    local abs_path="$1"
-
-    git -C "$abs_path" rev-parse --is-inside-work-tree >/dev/null 2>&1
+fallar() {
+    log "ERROR" "$1"
+    exit 1
 }
 
-ensure_gitmodules_entry() {
-    local repo_url="$1"
-    local local_path="$2"
-    local branch="$3"
-    local current_url
+tiene_cambios_locales() {
+    local ruta_submodulo="$1"
 
-    if current_url="$(git config --file .gitmodules --get "submodule.$local_path.url" 2>/dev/null)"; then
-        if [[ "$current_url" != "$repo_url" ]]; then
-            log "Updating URL for $local_path"
-            git config --file .gitmodules "submodule.$local_path.url" "$repo_url"
+    ! git -C "$ruta_submodulo" diff --quiet || \
+        ! git -C "$ruta_submodulo" diff --cached --quiet
+}
+
+trap 'log "ERROR" "Falló el comando en la línea $LINENO: $BASH_COMMAND"' ERR
+trap 'codigo_salida=$?; if [[ "$codigo_salida" -ne 0 ]]; then log "ERROR" "Proceso finalizado con errores (código $codigo_salida)."; fi' EXIT
+
+log "INFO" "Iniciando actualización de submódulos..."
+
+command -v git >/dev/null 2>&1 || fallar "El comando 'git' no está disponible."
+command -v bash >/dev/null 2>&1 || fallar "El comando 'bash' no está disponible."
+
+DIRECTORIO_SCRIPT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+if ! RAIZ_REPOSITORIO="$(git -C "$DIRECTORIO_SCRIPT" rev-parse --show-toplevel 2>/dev/null)"; then
+    fallar "No fue posible determinar la raíz del repositorio Git."
+fi
+
+DIRECTORIO_AIRFLOW="$RAIZ_REPOSITORIO/airflow"
+DIRECTORIO_SUBMODULOS_RELATIVO="airflow/submodules"
+DIRECTORIO_SUBMODULOS="$RAIZ_REPOSITORIO/$DIRECTORIO_SUBMODULOS_RELATIVO"
+ARCHIVO_GITMODULES="$RAIZ_REPOSITORIO/.gitmodules"
+
+[[ -d "$DIRECTORIO_AIRFLOW" ]] || fallar "No existe el directorio '$DIRECTORIO_AIRFLOW'."
+mkdir -p "$DIRECTORIO_SUBMODULOS"
+cd "$RAIZ_REPOSITORIO"
+
+log "INFO" "Validaciones completadas correctamente."
+log "INFO" "Raíz del repositorio: $RAIZ_REPOSITORIO"
+log "INFO" "Directorio de submódulos: $DIRECTORIO_SUBMODULOS"
+
+for registro_submodulo in "${SUBMODULOS[@]}"; do
+    IFS='|' read -r nombre_submodulo url_submodulo rama_submodulo <<< "$registro_submodulo"
+
+    [[ -n "$nombre_submodulo" && -n "$url_submodulo" && -n "$rama_submodulo" ]] || \
+        fallar "La definición de submódulo no es válida: '$registro_submodulo'."
+
+    ruta_relativa="$DIRECTORIO_SUBMODULOS_RELATIVO/$nombre_submodulo"
+    ruta_absoluta="$RAIZ_REPOSITORIO/$ruta_relativa"
+    script_configuracion="$ruta_absoluta/configure.sh"
+    url_actual=""
+    rama_actual=""
+    rama_registrada=""
+
+    log "INFO" "Procesando submódulo: $nombre_submodulo"
+    log "INFO" "Ruta: $ruta_relativa"
+    log "INFO" "Repositorio: $url_submodulo"
+    log "INFO" "Rama esperada: $rama_submodulo"
+
+    if [[ -f "$ARCHIVO_GITMODULES" ]] && \
+        url_actual="$(git config --file "$ARCHIVO_GITMODULES" --get "submodule.$ruta_relativa.url" 2>/dev/null)"; then
+        log "INFO" "La entrada del submódulo ya está registrada en .gitmodules."
+
+        if [[ "$url_actual" != "$url_submodulo" ]]; then
+            log "INFO" "Actualizando la URL registrada del submódulo."
+            git config --file "$ARCHIVO_GITMODULES" "submodule.$ruta_relativa.url" "$url_submodulo"
         fi
 
-        if [[ -n "$branch" ]]; then
-            git config --file .gitmodules "submodule.$local_path.branch" "$branch"
+        rama_registrada="$(git config --file "$ARCHIVO_GITMODULES" \
+            --get "submodule.$ruta_relativa.branch" 2>/dev/null || true)"
+        if [[ "$rama_registrada" != "$rama_submodulo" ]]; then
+            log "INFO" "Actualizando la rama registrada a '$rama_submodulo'."
+            git config --file "$ARCHIVO_GITMODULES" "submodule.$ruta_relativa.branch" "$rama_submodulo"
         fi
-        return
-    fi
-
-    log "Registering submodule $local_path"
-    if [[ -n "$branch" ]]; then
-        git submodule add --force -b "$branch" "$repo_url" "$local_path"
     else
-        git submodule add --force "$repo_url" "$local_path"
-    fi
-}
-
-ensure_working_branch() {
-    local abs_path="$1"
-    local branch="$2"
-    local current_branch
-
-    [[ -n "$branch" ]] || return
-
-    current_branch="$(git -C "$abs_path" symbolic-ref --short -q HEAD || true)"
-    if [[ "$current_branch" == "$branch" ]]; then
-        return
+        log "INFO" "Registrando y descargando el submódulo."
+        git submodule add --force -b "$rama_submodulo" "$url_submodulo" "$ruta_relativa"
     fi
 
-    if [[ -n "$current_branch" ]]; then
-        log "Submodule is on branch '$current_branch'; leaving it as-is."
-        return
-    fi
+    log "INFO" "Sincronizando la configuración local del submódulo."
+    git submodule sync -- "$ruta_relativa"
 
-    if has_tracked_changes "$abs_path"; then
-        warn "Submodule has tracked local changes while HEAD is detached. Skipping branch checkout for $abs_path."
-        return
-    fi
-
-    if git -C "$abs_path" show-ref --verify --quiet "refs/heads/$branch"; then
-        git -C "$abs_path" checkout "$branch"
-    elif git -C "$abs_path" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
-        git -C "$abs_path" checkout -b "$branch" --track "origin/$branch"
+    if git -C "$ruta_absoluta" rev-parse --is-inside-work-tree >/dev/null 2>&1 && \
+        tiene_cambios_locales "$ruta_absoluta"; then
+        log "WARN" "El submódulo tiene cambios locales. Se omite la actualización remota para conservarlos."
     else
-        warn "Branch '$branch' was not found for $abs_path. Leaving current checkout."
-    fi
-}
+        log "INFO" "Inicializando el submódulo y sus dependencias recursivas."
+        git submodule update --init --recursive -- "$ruta_relativa"
 
-update_submodule_remote() {
-    local abs_path="$1"
-    local branch="$2"
+        git -C "$ruta_absoluta" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+            fallar "La ruta '$ruta_relativa' no contiene un repositorio Git válido."
 
-    [[ "$SUBMODULE_UPDATE_REMOTE" == "1" ]] || return
-    [[ -n "$branch" ]] || return
+        log "INFO" "Descargando cambios de origin/$rama_submodulo."
+        git -C "$ruta_absoluta" fetch origin \
+            "+refs/heads/$rama_submodulo:refs/remotes/origin/$rama_submodulo"
 
-    if has_tracked_changes "$abs_path"; then
-        warn "Submodule has tracked local changes. Skipping remote update for $abs_path."
-        return
-    fi
+        rama_actual="$(git -C "$ruta_absoluta" symbolic-ref --short -q HEAD || true)"
+        if [[ -z "$rama_actual" ]]; then
+            if git -C "$ruta_absoluta" show-ref --verify --quiet "refs/heads/$rama_submodulo"; then
+                log "INFO" "Cambiando a la rama local '$rama_submodulo'."
+                git -C "$ruta_absoluta" checkout "$rama_submodulo"
+                rama_actual="$rama_submodulo"
+            else
+                log "INFO" "Creando la rama local '$rama_submodulo' desde origin/$rama_submodulo."
+                git -C "$ruta_absoluta" checkout -b "$rama_submodulo" --track "origin/$rama_submodulo"
+                rama_actual="$rama_submodulo"
+            fi
+        fi
 
-    git -C "$abs_path" fetch origin "$branch"
-    ensure_working_branch "$abs_path" "$branch"
-
-    if [[ "$(git -C "$abs_path" symbolic-ref --short -q HEAD || true)" == "$branch" ]]; then
-        git -C "$abs_path" pull --ff-only origin "$branch"
-    fi
-}
-
-init_or_update_submodule() {
-    local local_path="$1"
-    local abs_path="$2"
-
-    if is_git_worktree "$abs_path" && has_tracked_changes "$abs_path"; then
-        warn "Submodule has tracked local changes. Skipping git submodule update for $abs_path."
-        return
+        if [[ "$rama_actual" == "$rama_submodulo" ]]; then
+            log "INFO" "Actualizando la rama '$rama_submodulo' mediante avance rápido."
+            git -C "$ruta_absoluta" merge --ff-only "origin/$rama_submodulo"
+        elif [[ -n "$rama_actual" ]]; then
+            log "WARN" "El submódulo está en la rama '$rama_actual'. Se conserva y no se actualiza '$rama_submodulo'."
+        fi
     fi
 
-    git submodule update --init --recursive "$local_path"
-}
+    [[ -f "$script_configuracion" ]] || \
+        fallar "No se encontró el archivo configure.sh en '$ruta_relativa'."
 
-run_configure_script() {
-    local abs_path="$1"
-    local configure_script="$abs_path/configure.sh"
-
-    if [[ ! -f "$configure_script" ]]; then
-        warn "No configure.sh found in $abs_path. Skipping configuration."
-        return
-    fi
-
-    log "Running configure.sh in $CONFIGURE_MODE mode"
-    (
-        cd "$abs_path"
-        AIRFLOW_ROOT="$REPO_ROOT/$AIRFLOW_DIR" CONFIGURE_MODE="$CONFIGURE_MODE" bash configure.sh
-    )
-}
-
-log "Repository root: $REPO_ROOT"
-log "Submodules directory: $SUBMODULES_DIR"
-log "Configure mode: $CONFIGURE_MODE"
-
-for submodule in "${SUBMODULES[@]}"; do
-    read -r REPO_URL FOLDER_NAME BRANCH <<< "$submodule"
-    BRANCH="${BRANCH:-main}"
-    LOCAL_PATH="$SUBMODULES_DIR/$FOLDER_NAME"
-    ABS_PATH="$REPO_ROOT/$LOCAL_PATH"
-
-    log "Processing $LOCAL_PATH"
-    log "Repository: $REPO_URL"
-    log "Branch: $BRANCH"
-
-    ensure_gitmodules_entry "$REPO_URL" "$LOCAL_PATH" "$BRANCH"
-
-    git submodule sync -- "$LOCAL_PATH"
-    init_or_update_submodule "$LOCAL_PATH" "$ABS_PATH"
-
-    update_submodule_remote "$ABS_PATH" "$BRANCH"
-    ensure_working_branch "$ABS_PATH" "$BRANCH"
-    run_configure_script "$ABS_PATH"
-
-    log "Submodule ready: $LOCAL_PATH"
-    log "--------------------------------------------"
+    log "INFO" "Creando los enlaces de Airflow mediante configure.sh."
+    AIRFLOW_ROOT="$DIRECTORIO_AIRFLOW" bash "$script_configuracion"
+    log "OK" "Submódulo '$nombre_submodulo' actualizado y enlazado correctamente."
 done
 
-log "Submodule update process finished."
+log "OK" "Proceso finalizado correctamente."

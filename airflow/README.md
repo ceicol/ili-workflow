@@ -28,16 +28,13 @@ sh scripts/download_dependencies.sh
 ```shell
 vi update_submodules.sh
 
-# add submodule etl AirFlow
-SUBMODULES=(
-        "https://github.com/ceicol/af_terrainfo_to_ladm.git terrainfo_to_ladm main"
+# Agrega el submódulo ETL de Airflow con el formato nombre|URL|rama.
+SUBMODULOS=(
+        "terrainfo_to_ladm|https://github.com/ceicol/af_terrainfo_to_ladm.git|main"
 )
 
-# Desarrollo: crea symlinks hacia el submódulo para que los cambios se hagan en el repo del ETL.
-CONFIGURE_MODE=link bash update_submodules.sh
-
-# Materializado: sincroniza los archivos con rsync --delete.
-CONFIGURE_MODE=sync bash update_submodules.sh
+# Descarga o actualiza el submódulo y crea los enlaces hacia el ETL.
+bash update_submodules.sh
 ```
 
 
