@@ -1,9 +1,9 @@
 
-from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 def task_validar_conexion(postgres_conn_id: str):
-    return PostgresOperator(
+    return SQLExecuteQueryOperator(
         task_id="validar_conexion_postgres",
-        postgres_conn_id=postgres_conn_id,
+        conn_id=postgres_conn_id,
         sql="SELECT 1;",
     )
