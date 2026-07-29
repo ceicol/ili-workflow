@@ -52,9 +52,12 @@ x-airflow-common:
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.3.0}
   # En lugar de la imagen oficial, usamos la imagen que construiremos (con Java)
   # build: .
+  platform: linux/amd64
   build:
     context: .
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.airflow-qgis
+    platforms:
+      - linux/amd64
   env_file:
     - ${ENV_FILE_PATH:-.env}
   environment:

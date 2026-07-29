@@ -92,5 +92,5 @@ docker compose -f compose.dev.yaml exec airflow-scheduler docker ps
 
 ## Despliegues de docker compose
 
-[compose con soporte para DockerOperator](compose.geodev.yml)
-[Compose sin soporte para DockerOperator](compose.dev.yml)
+Si deseamos que Airflow soporte QGIS, GRASS y GDAL debemos usar [Dockerfile.airflow-qgis-grass](Dockerfile.airflow-qgis-grass)
+Si solo requeremos Airflow con soporte de java 21 pudemos usar [Dockerfile](Dockerfile)
