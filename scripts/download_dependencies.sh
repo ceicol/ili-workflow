@@ -5,7 +5,7 @@
 
 
 LEGACY_ILI2DB_VERSION="4.4.3"
-ILI2DB_VERSION="5.3.1"
+ILI2DB_VERSION="5.5.2"
 
 # Target directory
 ILI2DB_DEST_DIR="airflow/libs/iliwrapper/bin"

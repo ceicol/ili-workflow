@@ -94,3 +94,38 @@ docker compose -f compose.dev.yaml exec airflow-scheduler docker ps
 
 Si deseamos que Airflow soporte QGIS, GRASS y GDAL debemos usar [Dockerfile.airflow-qgis-grass](Dockerfile.airflow-qgis-grass)
 Si solo requeremos Airflow con soporte de java 21 pudemos usar [Dockerfile](Dockerfile)
+
+
+### Reconstruir la imagen de QGIS - Airflow - Java - GDAL - GRASS
+
+```
+docker build \
+  --no-cache \
+  --platform=linux/amd64 \
+  -f Dockerfile.airflow-qgis-grass \
+  -t airflow-qgis:3.3.0-qgis3.44-grass-java21 \
+  .
+```
+
+### Validar la nueva imagen
+
+```
+docker run --rm \
+  --platform=linux/amd64 \
+  airflow-qgis:3.3.0-qgis3.44-grass-java21 \
+  bash -lc '
+    set -eux
+
+    echo "=== GRASS ==="
+    grass --version
+
+    echo "=== Plugin ==="
+    qgis_process plugins
+
+    echo "=== Algoritmo ==="
+    qgis_process help grass:v.clean
+
+    echo "=== Identificador ==="
+    qgis_process list | grep -F "grass:v.clean"
+  '
+```

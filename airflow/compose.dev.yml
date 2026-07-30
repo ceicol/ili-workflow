@@ -55,7 +55,7 @@ x-airflow-common:
   platform: linux/amd64
   build:
     context: .
-    dockerfile: Dockerfile.airflow-qgis
+    dockerfile: Dockerfile.airflow-qgis-grass
     platforms:
       - linux/amd64
   env_file:
