@@ -1,8 +1,5 @@
 # ETL
 
-airflow/config/etl_config/*
-airflow/logic/*
-airflow/dags/*
 airflow/output/*
 airflow/logs/*
 airflow/.env
