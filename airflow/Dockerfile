@@ -1,5 +1,5 @@
 # Apache Airflow 3.3.0
-FROM apache/airflow:3.3.0
+FROM apache/airflow:3.3.2
 
 # ---------------------------------------------------------------------
 # Dependencias del sistema

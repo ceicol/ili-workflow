@@ -55,7 +55,7 @@ x-airflow-common:
   platform: linux/amd64
   build:
     context: .
-    dockerfile: Dockerfile.airflow-qgis-grass
+    dockerfile: Dockerfile
     platforms:
       - linux/amd64
   env_file:
@@ -71,7 +71,9 @@ x-airflow-common:
     AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+    # Custom deploy subpath
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080${AIRFLOW_PATH}/execution/'
+    AIRFLOW__API__BASE_URL: '${AIRFLOW_PUBLIC_URL}${AIRFLOW_PATH}'
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:-airflow_jwt_secret}
     AIRFLOW__API_AUTH__JWT_ISSUER: ${AIRFLOW__API_AUTH__JWT_ISSUER:-airflow}
     # yamllint disable rule:line-length

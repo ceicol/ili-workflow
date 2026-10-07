@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG AIRFLOW_VERSION=3.3.0
+ARG AIRFLOW_VERSION=3.3.2
 ARG PYTHON_VERSION=3.11
 
 FROM apache/airflow:${AIRFLOW_VERSION}-python${PYTHON_VERSION}
