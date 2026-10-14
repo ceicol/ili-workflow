@@ -93,7 +93,7 @@ def import_schema(ili2db_config:Ili2DbConfiguration):
         "--coalesceMultiLine", "--coalesceMultiPoint", "--coalesceArray",
         "--beautifyEnumDispName", "--createGeomIdx", "--createMetaInfo",
         "--expandMultilingual", "--createTypeConstraint",
-        "--createEnumTabsWithId", "--createTidCol", "--smart2Inheritance",
+        "--createEnumTabs", "--createTidCol", "--smart2Inheritance",
         "--strokeArcs", 
         "--defaultSrsAuth", "EPSG",
         "--defaultSrsCode", "9377",
