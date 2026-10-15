@@ -34,7 +34,7 @@ vi update_submodules.sh
 
 # Agrega el submódulo ETL de Airflow con el formato nombre|URL|rama.
 SUBMODULOS=(
-        "terrainfo_to_ladm|https://github.com/ceicol/af_terrainfo_to_ladm.git|main"
+        "af_ms_to_ladm_nca|https://github.com/ceicol/af_ms_to_ladm_nca.git|main"
 )
 
 # Descarga o actualiza el submódulo y crea los enlaces hacia el ETL.
