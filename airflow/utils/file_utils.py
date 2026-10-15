@@ -9,11 +9,13 @@ from urllib.parse import urlparse
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
 import logging
+from config.general_config import OUTPUT_DIR, S3_ROOT_STORAGE
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from config.general_config import OUTPUT_DIR
+
 
 
 def download_or_copy_xtf(process_id: str, source: str, etl_name:str) -> str:
@@ -146,3 +148,14 @@ def compress_xtf_file(file_path: str) -> str:
         zipf.write(file_path, arcname=file_name)
 
     return zip_full_path
+
+
+def upload_to_s3_xtf_ladm(process_id: str, etl_name: str):
+    xtf_path = os.path.join(OUTPUT_DIR, etl_name, process_id, 'output_{}.xtf'.format(process_id))
+    xtf_zip_path = compress_xtf_file(xtf_path)
+    s3_path = upload_file_to_aws_s3(
+        file_path=xtf_zip_path,
+        folder_name=os.path.join(S3_ROOT_STORAGE, etl_name)
+    )
+    print(s3_path)
+
