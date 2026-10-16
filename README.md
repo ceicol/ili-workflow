@@ -45,5 +45,10 @@ bash update_submodules.sh
 
 ```shell
 cd airflow
+
+# En producción
 docker compose up -d
+
+# En local
+docker compose -f compose.dev.yml up -d
 ```

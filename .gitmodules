@@ -1,0 +1,4 @@
+[submodule "airflow/submodules/af_ms_to_ladm_rhc"]
+	path = airflow/submodules/af_ms_to_ladm_rhc
+	url = https://github.com/ceicol/af_ms_to_ladm_rhc.git
+	branch = main
