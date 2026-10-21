@@ -42,7 +42,7 @@ Proporcionar la guía para desplegar, configurar, verificar y mantener el Orques
 
 ## 3. DESCRIPCIÓN DE LA SOLUCIÓN
 
-El orquestador es la plataforma de ejecución común para los ETL de modelo simplificado → LADM_COL. **No contiene la lógica de cada transformación**: cada ETL vive en su propio repositorio Git (por ejemplo `af_ms_to_ladm_rhc`), se registra como submódulo y se enlaza a Airflow mediante el script `configure.sh` del propio ETL. Sus funciones principales son:
+El orquestador es la plataforma de ejecución común para los ETL de modelo simplificado → modelo extendio LADM_COL. **No contiene la lógica de cada transformación**: cada ETL vive en su propio repositorio Git (e.g: `af_ms_to_ladm_rhc`, `af_ms_to_ladm_nca` y `af_ms_to_ladm_zra`), se registra como submódulo y se enlaza a Airflow mediante el script `configure.sh` del propio ETL. Sus funciones principales son:
 
 - **Gestión de ETL:** registro centralizado, alta y actualización de los ETL como submódulos con un único script (`update_submodules.sh`).
 - **Integración con Airflow:** enlace automático de los DAG, modelos INTERLIS y scripts de cada ETL en las rutas que Airflow espera.
@@ -73,7 +73,7 @@ Flujo estándar de un DAG ETL, construido con las tareas que provee el orquestad
 | 3 | `importar_esquema_modelo_simplificado` | Crea con ili2db el esquema `input_<process_id>` a partir del modelo simplificado. |
 | 4 | `importar_datos_modelo_simplificado` | Carga el XTF de entrada en `input_<process_id>`. |
 | 5 | `importar_esquema_modelo_ladm_col` | Crea el esquema `output_<process_id>` con el modelo extendido LADM_COL. |
-| 6 | Tareas SQL del ETL | Transforman los datos de `input_*` a `output_*` (`SQLExecuteQueryOperator`). |
+| 6 | Tareas SQL del ETL (`ETL_TASKS`) | Transforman los datos de `input_*` a `output_*` (`SQLExecuteQueryOperator`), en el orden definido en el DAG del ETL. |
 | 7 | `exportar_en_formato_xtf_datos_modelo_ladm_col` | Exporta y valida con ili2db el archivo `output_<process_id>.xtf`. |
 | 8 | `publicar_en_s3_datos_zip_xtf_ladm_col` | Comprime el XTF y lo publica en S3 bajo `ili-workflow/<etl>/`. |
 
@@ -133,18 +133,18 @@ Estructura del repositorio y propósito de cada elemento:
 | `airflow/.env` · `airflow/.env.example` | Variables de entorno del despliegue. `.env` contiene secretos y **no se versiona**. |
 | `airflow/compose.yml` · `airflow/compose.dev.yml` | Servicios para producción y para desarrollo local. |
 | `airflow/Dockerfile` · `airflow/requirements.txt` | Imagen personalizada (Airflow 3.3.0 + Java 21) y dependencias Python. |
-| `airflow/config/` | Rutas de trabajo, rutas de los JAR de ili2pg y lectura de parámetros de BD. |
+| `airflow/config/` | Rutas de trabajo, rutas de los JAR de ili2pg y lectura de parámetros de BD. En `config/etl_config/<etl>` se enlaza el `config.py` de cada ETL. |
 | `airflow/utils/` | Funciones reutilizables: ili2db, archivos y S3, tareas del flujo estándar y validadores de insumos y conexiones. |
-| `airflow/logic/` | Tareas ili2db estándar (`models.py`) y lógica enlazada de cada ETL (`logic/<etl>`). |
-| `airflow/dags/` | DAG de los ETL, enlazados por su `configure.sh`. |
+| `airflow/logic/` | Tareas ili2db estándar (`models.py`) y, enlazados en `logic/<etl>`, los SQL y modelos INTERLIS de cada ETL. |
+| `airflow/dags/` | DAG de cada ETL (`dags/<etl>/etl_dag.py`), enlazado por su `configure.sh`. |
 | `airflow/libs/` | ili2pg descargado (`iliwrapper/bin`) y script `insert_ctm12_pg.sql` que registra EPSG:9377. |
 | `airflow/submodules/` | Repositorios de los ETL (montados en solo lectura en los contenedores). |
-| `airflow/output/` · `airflow/logs/` | Archivos generados por cada ejecución y logs de Airflow (no versionados). |
+| `airflow/output/` · `airflow/logs/` | Archivos generados por cada ejecución (`output/<etl>/<process_id>/`) y logs de Airflow (no versionados). |
 | `airflow/update_submodules.sh` | Registro y actualización de los ETL. |
 | `scripts/download_dependencies.sh` | Descarga de ili2pg. |
 | `docs/` | Documentación técnica detallada (variables, Nginx, PostgreSQL en Linux). |
 
-Cada repositorio ETL debe incluir su `configure.sh`, sus DAG y scripts SQL, y los modelos INTERLIS que el orquestador espera en `logic/<etl>/resources/models/SIMPLIFICADO` y `logic/<etl>/resources/models/LADM_COL`.
+Cada ETL sigue una estructura estándar (`config/etl_config/<etl>`, `dags/<etl>`, `logic/<etl>` y `output/<etl>`) que su `configure.sh` enlaza en las carpetas equivalentes del orquestador, de modo que las configuraciones de los distintos ETL no se mezclan. La estructura de los ETL entregados, las consideraciones para su despliegue y su ejecución se detallan en `docs/instructivo_despliegue_etl_otl.md`.
 
 Variables de entorno (`airflow/.env`, creado a partir de `.env.example`). Docker Compose las carga en los contenedores y las usa para sustituir los valores `${...}` de los archivos `compose`. El detalle está en `docs/configuracion_variables_entorno.md`.
 
@@ -178,11 +178,13 @@ Diferencias entre los archivos de Compose:
 | `FERNET_KEY` | Tomada del `.env` | Vacía |
 | `host.docker.internal` | No definido: usar IP o DNS real de la BD | Mapeado al host (`host-gateway`) |
 
-Registro de ETL: en `airflow/update_submodules.sh` se agrega una línea por ETL con el formato `nombre|URL|rama`:
+Registro de ETL: en `airflow/update_submodules.sh` se agrega una línea por ETL con el formato `nombre|URL|rama`; se pueden registrar tantos ETL como se requiera:
 
 ```bash
 SUBMODULOS=(
     "af_ms_to_ladm_rhc|https://github.com/ceicol/af_ms_to_ladm_rhc.git|main"
+    "af_ms_to_ladm_nca|https://github.com/ceicol/af_ms_to_ladm_nca.git|main"
+    "af_ms_to_ladm_zra|https://github.com/ceicol/af_ms_to_ladm_zra.git|main"
 )
 ```
 
@@ -237,7 +239,7 @@ Salvo que se indique lo contrario, los comandos se ejecutan en la carpeta `airfl
    chmod 600 .env
    ```
 
-5. **Registrar y enlazar los ETL.** Editar `SUBMODULOS` en `update_submodules.sh` y ejecutarlo. Por cada ETL, el script: registra el submódulo en `.gitmodules` (o actualiza su URL y rama), lo inicializa, trae la rama indicada y la actualiza por avance rápido (si hay cambios locales los conserva y omite la actualización) y, por último, ejecuta el `configure.sh` del ETL, que crea los enlaces hacia Airflow. Debe terminar con `[OK] Proceso finalizado correctamente.`
+5. **Registrar y enlazar los ETL.** Editar `SUBMODULOS` en `update_submodules.sh` y ejecutarlo. Por cada ETL, el script: registra el submódulo en `.gitmodules` (o actualiza su URL y rama), lo inicializa, trae la rama indicada y la actualiza por avance rápido (si hay cambios locales los conserva y omite la actualización) y, por último, ejecuta el `configure.sh` del ETL, que crea los enlaces hacia Airflow. Debe terminar con `[OK] Proceso finalizado correctamente.` y dejar, por cada ETL, los enlaces `dags/<etl>`, `logic/<etl>` y `config/etl_config/<etl>` y la carpeta `output/<etl>`. No es necesario reiniciar los servicios: Airflow detecta el nuevo DAG en unos minutos. La estructura de cada ETL, su ejecución y la verificación de resultados se describen en `docs/instructivo_despliegue_etl_otl.md`.
 
    ```bash
    bash update_submodules.sh
@@ -292,7 +294,7 @@ Salvo que se indique lo contrario, los comandos se ejecutan en la carpeta `airfl
 | Falla la publicación en S3 (`AccessControlListNotSupported`, credenciales) | Bucket sin ACL habilitadas o credenciales/región incorrectas | Habilitar ACL en el bucket (Object Ownership) y validar las variables `S3_AWS_*`. Si el log muestra `exceptions must derive from BaseException`, la causa real está en la línea de error previa. |
 | Página en blanco o 404 en `/airflow` | `BASE_URL` no aplicado, `proxy_pass` con `/` final o `location` distinto de `AIRFLOW_PATH` | Validar con `docker compose config`, recrear contenedores y alinear la configuración de Nginx. |
 | La UI carga, pero todas las tareas fallan | `EXECUTION_API_SERVER_URL` sin el subpath | Verificar que use `${AIRFLOW_PATH}/execution/` y recrear contenedores. |
-| El DAG del ETL no aparece | El ETL no quedó enlazado o tiene errores de importación | Confirmar el `[OK]` de `update_submodules.sh` y revisar `airflow dags list-import-errors` y `docker compose logs airflow-dag-processor`. |
+| El DAG del ETL no aparece | El ETL no quedó enlazado o tiene errores de importación | Confirmar el `[OK]` de `update_submodules.sh` y revisar `airflow dags list-import-errors` y `docker compose logs airflow-dag-processor`. Errores propios del ETL: sección 10 de `docs/instructivo_despliegue_etl_otl.md`. |
 | `PermissionError` al escribir en `logs/` u `output/` | Archivos creados con otro UID | Corregir `AIRFLOW_UID` y ejecutar `sudo chown -R $(id -u):0 logs output`. |
 
 Para diagnosticar cualquier caso: log de la tarea en la interfaz de Airflow y `docker compose logs -f <servicio>`.
@@ -308,7 +310,7 @@ Para diagnosticar cualquier caso: log de la tarea en la interfaz de Airflow y `d
 | 5 | Integración | Conectividad a la BD de los ETL | `docker compose exec airflow-worker bash -c 'pg_isready -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER"'` | `accepting connections`. |
 | 6 | Funcional | Carga de DAG | `docker compose exec airflow-scheduler airflow dags list` y `airflow dags list-import-errors` | Los DAG de los ETL listados y sin errores de importación. |
 | 7 | Funcional | Acceso web | Abrir `${AIRFLOW_PUBLIC_URL}${AIRFLOW_PATH}/` e iniciar sesión | Interfaz completa, sin errores 404 en la pestaña Red del navegador. |
-| 8 | Funcional | Ejecución de extremo a extremo | Ejecutar un DAG ETL con un XTF de prueba del modelo simplificado | Todas las tareas en `success`; en `output/<etl>/<process_id>/` quedan `<process_id>.xtf`, `output_<process_id>.xtf` y `.zip`; en la BD existen `input_<process_id>` y `output_<process_id>`; en S3 existe `ili-workflow/<etl>/output_<process_id>.zip`. |
+| 8 | Funcional | Ejecución de extremo a extremo | Ejecutar el DAG de un ETL con un XTF de prueba (por defecto, `SIMPLIFIED_MODEL_EXAMPLE_XTF`) | Todas las tareas en `success`; en `output/<etl>/<process_id>/` quedan `<process_id>.xtf`, `output_<process_id>.xtf` y `.zip`; en la BD existen `input_<process_id>` y `output_<process_id>`; en S3 existe `ili-workflow/<etl>/output_<process_id>.zip`. |
 | 9 | Seguridad | Exposición de puertos (producción) | `sudo ss -tlnp \| grep 8080` | Solo `127.0.0.1:8080`; el acceso externo es únicamente por Nginx (HTTPS). |
 | 10 | Seguridad | Protección de secretos | `ls -l .env` y `git check-ignore -v .env` | Permisos `-rw-------` y archivo ignorado por Git. |
 | 11 | Rendimiento | Consumo de recursos | `docker stats` durante la prueba 8 | Sin reinicios de contenedores ni memoria saturada de forma sostenida. |
@@ -322,7 +324,7 @@ Para diagnosticar cualquier caso: log de la tarea en la interfaz de Airflow y `d
 | Respaldo de configuración | En cada cambio | Copia segura de `.env` (en especial `FERNET_KEY`) y registro de los ETL y commits desplegados. |
 | Prueba de restauración | Mensual | Restaurar un respaldo en un ambiente de pruebas y verificar su integridad. |
 | Actualizar un ETL | Según publicación del ETL | `bash update_submodules.sh`. Si el submódulo tiene cambios locales, los conserva y omite la actualización (mensaje `WARN`). Airflow recarga los DAG sin reiniciar. |
-| Agregar un ETL | Según necesidad | Añadir su línea en `SUBMODULOS` y ejecutar `update_submodules.sh`. |
+| Registrar un ETL | Según necesidad | Añadir su línea en `SUBMODULOS`, ejecutar `update_submodules.sh` y seguir `docs/instructivo_despliegue_etl_otl.md`, incluida la ficha técnica del ETL. |
 | Actualizar el orquestador | Según publicación | Probar primero en ambiente local; luego `git pull`, `docker compose build` y `docker compose up -d`. |
 | Actualizar ili2db | Según necesidad | Cambiar la versión en `scripts/download_dependencies.sh` **y** en `airflow/config/enums.py`, y volver a ejecutar la descarga. |
 | Limpieza de ejecuciones | Mensual | Cada ejecución crea los esquemas `input_<process_id>` y `output_<process_id>` y una carpeta en `output/`. Eliminar los que ya no se requieran (`DROP SCHEMA ... CASCADE`). |
