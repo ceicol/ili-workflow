@@ -71,7 +71,7 @@ p.mkdir(parents=True, exist_ok=True); \
 
 COPY --chown=airflow:root requirements.txt /tmp/requirements.txt
 
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir --only-binary :all: \
         "apache-airflow==${AIRFLOW_VERSION}" \
         -r /tmp/requirements.txt \
         --constraint "${HOME}/constraints.txt"
