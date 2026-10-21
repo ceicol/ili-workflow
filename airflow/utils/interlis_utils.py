@@ -53,7 +53,7 @@ def exportar_xtf(ili2db_config:Ili2DbConfiguration):
 
     try: 
         result = subprocess.run(command, check=True, capture_output=True, text=True)
-        logging.info(f"Exportación a XTF completada: {result.stderr.strip()}")
+        logging.info(f"Exportación a XTF completada exitosamente: {result.stderr.strip()}")
     except subprocess.CalledProcessError as e:
         logging.error(f"Error exportando XTF: {e.stderr}")
         raise RuntimeError(f"Error exportando XTF: {e.stderr}")
@@ -107,15 +107,18 @@ def import_schema(ili2db_config:Ili2DbConfiguration):
     if ili2db_config.USE_BASKETS == True:
         command.append("--createBasketCol")
 
-    logging.info("Ejecutando import schema: {}".format(ili2db_config.MODEL_NAME))
+    logging.info("Ejecutando import schema:")
     logging.info(" ".join(command))
 
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
-        logging.info(f"EL modelo {ili2db_config.MODEL_NAME} ha sido correctamente importado en el esquema {ili2db_config.SCHEMA_NAME}.")
+        logging.info(f"Creación del esquema de la base de datos completada: {result.stderr.strip()}")
     except subprocess.CalledProcessError as e:
-        logging.error("❌ Ocurrio un error al importar el modelo {} en el esquema {}.".format(ili2db_config.MODEL_NAME, ili2db_config.SCHEMA_NAME))
-        raise RuntimeError(f"Error importando {ili2db_config.MODEL_NAME}: {e}")
+        logging.error(f"Error al crear el esquema de la base de datos: {e.stderr}")
+        raise RuntimeError(f"Error al crear el esquema de la base de datos: {e.stderr}")
+    except Exception as e:
+        logging.error(f"Error al crear el esquema de la base de datos: {e}")
+        raise RuntimeError(f"Error al crear el esquema de la base de datos: {e}")
     finally:
         logging.debug("STDOUT:\n", result.stdout)
         logging.debug("STDERR:\n", result.stderr)
@@ -151,15 +154,18 @@ def import_data(ili2db_config:Ili2DbConfiguration):
         ili2db_config.XTF_PATH
     ]
 
-    logging.info("Ejecutando import schema: {}".format(ili2db_config.MODEL_NAME))
+    logging.info("Ejecutando import data:")
     logging.info(" ".join(command))
 
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
-        logging.info(f"EL modelo {ili2db_config.MODEL_NAME} ha sido correctamente importado en el esquema {ili2db_config.SCHEMA_NAME}.")
+        logging.info(f"Importación del XTF completada exitosamente: {result.stderr.strip()}")
     except subprocess.CalledProcessError as e:
-        logging.error("❌ Ocurrio un error al importar el modelo {} en el esquema {}.".format(ili2db_config.MODEL_NAME, ili2db_config.SCHEMA_NAME))
-        raise RuntimeError(f"Error importando {ili2db_config.MODEL_NAME}: {e}")
+        logging.error(f"Error importando el XTF: {e.stderr}")
+        raise RuntimeError(f"Error importando el XTF: {e.stderr}")
+    except Exception as e:
+        logging.error(f"Error importando el XTF: {e}")
+        raise RuntimeError(f"Error importando el XTF: {e}")
     finally:
         logging.debug("STDOUT:\n", result.stdout)
         logging.debug("STDERR:\n", result.stderr)
