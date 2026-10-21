@@ -62,7 +62,7 @@ Los enlaces son relativos, por lo que funcionan igual en el servidor y dentro de
 
 | Componente | Qué contiene | Rol en la ejecución |
 |---|---|---|
-| `configure.sh` | Script de enlace estándar | Lo ejecuta `update_submodules.sh` al registrar o actualizar el ETL. Exige que existan `dags/`, `logic/` y `config/etl_config/`. |
+| `configure.sh` | Script de enlace estándar | Lo ejecuta `update_submodules.sh` cada vez que registra o actualiza el ETL. Exige que existan `dags/`, `logic/` y `config/etl_config/`. |
 | `config.py` | Identificación del ETL, modelos, XTF de ejemplo y lista de SQL | Parametriza el DAG. |
 | `etl_dag.py` | DAG de Airflow (`dag_id` = nombre del ETL) | Define las tareas, los parámetros de ejecución y el orden en que se ejecutan los SQL. |
 | `sql/` | Scripts SQL numerados (`000`, `010`, `020`…) | Cada script resuelve una parte específica de la transformación del modelo simplificado al LADM_COL. |
@@ -121,7 +121,7 @@ El orden de los SQL está definido en el DAG y responde a la integridad referenc
 | Acceso a los repositorios | Los repositorios de los ETL son privados: el servidor necesita credenciales de Git con acceso de lectura (token HTTPS o llave SSH). |
 | Base de datos de los ETL | El script `000` de cada ETL crea, si no existen, las extensiones `postgis` y `uuid-ossp`. El usuario de `DB_USER` debe tener privilegios para crearlas, o un administrador debe crearlas antes. |
 | Independencia de los ETL | Cada ETL usa carpetas con su propio nombre. No se deben crear manualmente carpetas con ese nombre en `dags/`, `logic/` o `config/etl_config/`: `configure.sh` las movería a `airflow/.configure_backups/`. |
-| Submódulos de solo lectura | No se deben editar archivos dentro de `airflow/submodules/<repo>`. Si hay cambios locales, `update_submodules.sh` no actualiza ese ETL. Los ajustes se publican como una nueva versión en su repositorio. |
+| Submódulos de solo lectura | No se deben editar archivos dentro de `airflow/submodules/<repo>`. Si hay cambios locales o commits sin publicar, `update_submodules.sh` no actualiza ni desregistra ese ETL, para no perderlos. Los ajustes se publican como una nueva versión en su repositorio. |
 | Reinicio de servicios | Registrar o actualizar un ETL no requiere reiniciar Airflow; el DAG aparece en unos minutos y **queda pausado** hasta activarlo. |
 | `process_id` | Identifica cada ejecución y forma parte del nombre de los esquemas: solo minúsculas, números y guion bajo (p. ej. `nca_20261020_01`). No debe reutilizarse. Si se omite, Airflow propone uno aleatorio. |
 | XTF de entrada | Debe corresponder al modelo simplificado del ETL (`SIMPLIFIED_MODEL_NAME`) y su nombre debe terminar en `.xtf`. Puede ser una URL accesible desde el worker o un archivo dentro de una ruta visible por los contenedores, por ejemplo `airflow/output/<etl>/insumos/`, que en el contenedor es `/opt/airflow/output/<etl>/insumos/`. |
@@ -140,7 +140,7 @@ Los comandos se ejecutan en la carpeta `airflow/` del orquestador, salvo que se 
    git ls-remote https://github.com/ceicol/af_ms_to_ladm_nca.git
    ```
 
-2. **Registrar los ETL** en `update_submodules.sh`, una línea por ETL con el formato `nombre|URL|rama`. Se pueden registrar tantos ETL como se requiera:
+2. **Registrar los ETL** en `update_submodules.sh`, una línea por ETL con el formato `nombre|URL|rama`. Se pueden registrar tantos ETL como se requiera. La lista `SUBMODULOS` es la fuente de verdad: el script registra los ETL nuevos, actualiza los existentes y desregistra los que se retiren de ella:
 
    ```bash
    SUBMODULOS=(
@@ -150,7 +150,7 @@ Los comandos se ejecutan en la carpeta `airflow/` del orquestador, salvo que se 
    )
    ```
 
-3. **Descargar y enlazar los ETL.** Por cada ETL, el script registra el submódulo, descarga la rama indicada, la actualiza y ejecuta su `configure.sh`:
+3. **Descargar y enlazar los ETL.** Por cada ETL de la lista, el script registra el submódulo (si es nuevo), descarga la última versión de la rama indicada y ejecuta su `configure.sh`. Los ETL registrados que ya no estén en la lista se desregistran:
 
    ```bash
    bash update_submodules.sh
@@ -166,6 +166,7 @@ Los comandos se ejecutan en la carpeta `airflow/` del orquestador, salvo que se 
    [INFO] Directorio de salida preparado: output/ms_to_ladm_nca
    [OK] Submódulo 'af_ms_to_ladm_nca' actualizado y enlazado correctamente.
    ...
+   [INFO] Resumen: registrados=3, actualizados=0, desregistrados=0, omitidos=0.
    [OK] Proceso finalizado correctamente.
    ```
 
@@ -239,15 +240,19 @@ SELECT 'nca_interesado', count(*) FROM output_<process_id>.nca_interesado;
 
 | Operación | Procedimiento |
 |---|---|
-| Actualizar a una nueva versión | Cuando se publique una nueva versión en la rama registrada, ejecutar `bash update_submodules.sh`. El script actualiza por avance rápido; si el submódulo tiene cambios locales, los conserva y omite la actualización (mensaje `WARN`). No requiere reiniciar servicios. La nueva versión se refleja en la etiqueta `ETL_VERSION` del DAG; registrarla en la ficha técnica. |
-| Retirar un ETL | Quitar su línea de `SUBMODULOS`; eliminar los enlaces `dags/<etl>`, `logic/<etl>` y `config/etl_config/<etl>`; ejecutar desde la raíz del repositorio `git submodule deinit -f airflow/submodules/<repo>` y `git rm -f airflow/submodules/<repo>`; y, si se desea borrar su historial en Airflow, `airflow dags delete <etl>`. |
+| Actualizar a una nueva versión | Cuando se publique una nueva versión en la rama registrada, ejecutar `bash update_submodules.sh` para actualizar todos los ETL, o `bash update_submodules.sh <repo>` para actualizar solo uno (p. ej. `bash update_submodules.sh af_ms_to_ladm_nca`). El script descarga la rama, deja el submódulo en su último commit e indica el cambio (`Submódulo actualizado de <commit> a <commit>`). Si el submódulo tiene cambios locales o commits sin publicar, los conserva y omite la actualización (mensaje `WARN`). No requiere reiniciar servicios; la nueva versión se refleja en la etiqueta `ETL_VERSION` del DAG. |
+| Cambiar la rama o la URL de un ETL | Modificar su línea en `SUBMODULOS` y ejecutar `bash update_submodules.sh`. El script actualiza `.gitmodules` y cambia el submódulo a la nueva rama. |
+| Retirar un ETL | Quitar su línea de `SUBMODULOS` y ejecutar `bash update_submodules.sh`. El script desregistra el ETL: elimina sus enlaces `dags/<etl>`, `logic/<etl>` y `config/etl_config/<etl>`, su entrada en `.gitmodules`, la carpeta `airflow/submodules/<repo>` y su repositorio en `.git/modules`. La carpeta `output/<etl>`, con los resultados de ejecuciones anteriores, se conserva. Si se desea borrar también su historial en Airflow: `airflow dags delete <etl>`. |
+| Revisar qué cambió | Al final de cada ejecución el script muestra un resumen (`registrados`, `actualizados`, `desregistrados`, `omitidos`). Los cambios de submódulos quedan en el índice de Git del orquestador (`git status` desde la raíz del repositorio). |
 
 ## 10. ERRORES FRECUENTES
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `update_submodules.sh` falla con error de autenticación o `Repository not found` | El servidor no tiene acceso al repositorio privado o la URL es incorrecta | Validar con `git ls-remote <url>`, configurar las credenciales y revisar la línea en `SUBMODULOS`. |
-| `WARN El submódulo tiene cambios locales` | Se modificaron archivos dentro de `airflow/submodules/<repo>` | Si los cambios no se requieren, descartarlos (`git -C submodules/<repo> checkout -- .`) y repetir `update_submodules.sh`; los ajustes al ETL se publican en su repositorio. |
+| `WARN El submódulo tiene cambios locales sin confirmar` | Se modificaron archivos dentro de `airflow/submodules/<repo>` | Si los cambios no se requieren, descartarlos (`git -C submodules/<repo> checkout -- .`) y repetir `update_submodules.sh`; los ajustes al ETL se publican en su repositorio. |
+| `WARN El submódulo tiene commits que no están en el repositorio remoto` | Se hicieron commits dentro de `airflow/submodules/<repo>` sin publicarlos | Publicarlos en el repositorio del ETL o, si no se requieren, descartarlos (`git -C submodules/<repo> reset --hard origin/<rama>`) y repetir `update_submodules.sh`. |
+| `La ruta 'airflow/submodules/<repo>' existe y no es un submódulo` | Existe una carpeta con el nombre del submódulo que no fue creada por el script | Mover o eliminar la carpeta y repetir `update_submodules.sh`. |
 | `WARN Se respaldó la ruta existente en .configure_backups/...` | Existía una carpeta real con el nombre del ETL | Revisar el respaldo en `airflow/.configure_backups/` y eliminarlo si no se requiere. |
 | El DAG no aparece o figura en `airflow dags list-import-errors` | El ETL no quedó enlazado o la versión publicada tiene un error | Confirmar el `[OK]` del script y los enlaces (paso 4 de la sección 6); reportar el error de importación al responsable del ETL. |
 | Falla `download_xtf` (`The URL does not point to a .xtf file`, `Local file not found`, 404) | La URL no termina en `.xtf`, no es accesible desde el worker o la ruta local no es visible en el contenedor | Corregir `xtf_path`; para archivos locales usar una ruta bajo `/opt/airflow/output/`. |

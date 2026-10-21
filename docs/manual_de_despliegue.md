@@ -44,7 +44,7 @@ Proporcionar la guía para desplegar, configurar, verificar y mantener el Orques
 
 El orquestador es la plataforma de ejecución común para los ETL de modelo simplificado → modelo extendio LADM_COL. **No contiene la lógica de cada transformación**: cada ETL vive en su propio repositorio Git (e.g: `af_ms_to_ladm_rhc`, `af_ms_to_ladm_nca` y `af_ms_to_ladm_zra`), se registra como submódulo y se enlaza a Airflow mediante el script `configure.sh` del propio ETL. Sus funciones principales son:
 
-- **Gestión de ETL:** registro centralizado, alta y actualización de los ETL como submódulos con un único script (`update_submodules.sh`).
+- **Gestión de ETL:** registro centralizado, alta, actualización y retiro de los ETL como submódulos con un único script (`update_submodules.sh`).
 - **Integración con Airflow:** enlace automático de los DAG, modelos INTERLIS y scripts de cada ETL en las rutas que Airflow espera.
 - **Configuración centralizada:** un solo archivo `.env` con la conexión a la base de datos, el almacenamiento S3, la URL pública y las claves de seguridad.
 - **Librería de tareas reutilizables:** operaciones estándar de ili2db, ejecución de SQL, descarga de insumos, validaciones y publicación en S3, que todos los ETL comparten.
@@ -94,7 +94,7 @@ Los servicios se definen en `airflow/compose.yml` (producción) y `airflow/compo
 | Datos | `postgres` | PostgreSQL 16 | Base de metadatos de Airflow: DAG, ejecuciones, usuarios y conexiones cifradas. No es la BD de los ETL. |
 | Datos | BD de los ETL (externa) | PostgreSQL + PostGIS | Esquemas `input_*` y `output_*` de cada ejecución. |
 | Datos | Bucket S3 (externo) | S3 | Publicación de los XTF LADM_COL resultantes. |
-| Gestión de ETL | `update_submodules.sh` + `configure.sh` de cada ETL | Git (submódulos) | Registro, descarga, actualización y enlace de los ETL. |
+| Gestión de ETL | `update_submodules.sh` + `configure.sh` de cada ETL | Git (submódulos) | Registro, descarga, actualización, enlace y desregistro de los ETL. |
 | Soporte | `airflow-init` | Airflow | Migra la base de metadatos, crea el administrador, valida recursos y ajusta permisos. Termina al finalizar. |
 | Opcional | `flower` / `airflow-cli` | Celery Flower / CLI | Monitor de Celery (puerto 5555, `--profile flower`) y contenedor de depuración (`--profile debug`). |
 
@@ -140,7 +140,7 @@ Estructura del repositorio y propósito de cada elemento:
 | `airflow/libs/` | ili2pg descargado (`iliwrapper/bin`) y script `insert_ctm12_pg.sql` que registra EPSG:9377. |
 | `airflow/submodules/` | Repositorios de los ETL (montados en solo lectura en los contenedores). |
 | `airflow/output/` · `airflow/logs/` | Archivos generados por cada ejecución (`output/<etl>/<process_id>/`) y logs de Airflow (no versionados). |
-| `airflow/update_submodules.sh` | Registro y actualización de los ETL. |
+| `airflow/update_submodules.sh` | Registro, actualización y desregistro de los ETL según la lista `SUBMODULOS`. |
 | `scripts/download_dependencies.sh` | Descarga de ili2pg. |
 | `docs/` | Documentación técnica detallada (variables, Nginx, PostgreSQL en Linux). |
 
@@ -239,7 +239,7 @@ Salvo que se indique lo contrario, los comandos se ejecutan en la carpeta `airfl
    chmod 600 .env
    ```
 
-5. **Registrar y enlazar los ETL.** Editar `SUBMODULOS` en `update_submodules.sh` y ejecutarlo. Por cada ETL, el script: registra el submódulo en `.gitmodules` (o actualiza su URL y rama), lo inicializa, trae la rama indicada y la actualiza por avance rápido (si hay cambios locales los conserva y omite la actualización) y, por último, ejecuta el `configure.sh` del ETL, que crea los enlaces hacia Airflow. Debe terminar con `[OK] Proceso finalizado correctamente.` y dejar, por cada ETL, los enlaces `dags/<etl>`, `logic/<etl>` y `config/etl_config/<etl>` y la carpeta `output/<etl>`. No es necesario reiniciar los servicios: Airflow detecta el nuevo DAG en unos minutos. La estructura de cada ETL, su ejecución y la verificación de resultados se describen en `docs/instructivo_despliegue_etl_otl.md`.
+5. **Registrar y enlazar los ETL.** Editar `SUBMODULOS` en `update_submodules.sh` y ejecutarlo. La lista `SUBMODULOS` es la fuente de verdad. Por cada ETL de la lista, el script registra el submódulo en `.gitmodules` (o actualiza su URL y rama), lo inicializa, lo deja en el último commit de la rama indicada (si hay cambios locales o commits sin publicar, los conserva y omite la actualización) y ejecuta el `configure.sh` del ETL, que crea los enlaces hacia Airflow. Los ETL registrados que ya no estén en la lista se desregistran (submódulo y enlaces), conservando su carpeta `output/<etl>`. Con `bash update_submodules.sh <repo>` se actualiza solo el ETL indicado. Debe terminar con `[OK] Proceso finalizado correctamente.` y dejar, por cada ETL, los enlaces `dags/<etl>`, `logic/<etl>` y `config/etl_config/<etl>` y la carpeta `output/<etl>`. No es necesario reiniciar los servicios: Airflow detecta el nuevo DAG en unos minutos. La estructura de cada ETL, su ejecución y la verificación de resultados se describen en `docs/instructivo_despliegue_etl_otl.md`.
 
    ```bash
    bash update_submodules.sh
@@ -323,8 +323,8 @@ Para diagnosticar cualquier caso: log de la tarea en la interfaz de Airflow y `d
 | Respaldo de metadatos de Airflow | Diaria | `docker compose exec -T postgres pg_dump -U airflow airflow \| gzip > airflow_meta_$(date +%F).sql.gz` |
 | Respaldo de configuración | En cada cambio | Copia segura de `.env` (en especial `FERNET_KEY`) y registro de los ETL y commits desplegados. |
 | Prueba de restauración | Mensual | Restaurar un respaldo en un ambiente de pruebas y verificar su integridad. |
-| Actualizar un ETL | Según publicación del ETL | `bash update_submodules.sh`. Si el submódulo tiene cambios locales, los conserva y omite la actualización (mensaje `WARN`). Airflow recarga los DAG sin reiniciar. |
-| Registrar un ETL | Según necesidad | Añadir su línea en `SUBMODULOS`, ejecutar `update_submodules.sh` y seguir `docs/instructivo_despliegue_etl_otl.md`, incluida la ficha técnica del ETL. |
+| Actualizar un ETL | Según publicación del ETL | `bash update_submodules.sh` (todos) o `bash update_submodules.sh <repo>` (uno). Si el submódulo tiene cambios locales o commits sin publicar, los conserva y omite la actualización (mensaje `WARN`). Airflow recarga los DAG sin reiniciar. |
+| Registrar o retirar un ETL | Según necesidad | Añadir o quitar su línea en `SUBMODULOS` y ejecutar `bash update_submodules.sh`; seguir `docs/instructivo_despliegue_etl_otl.md`. |
 | Actualizar el orquestador | Según publicación | Probar primero en ambiente local; luego `git pull`, `docker compose build` y `docker compose up -d`. |
 | Actualizar ili2db | Según necesidad | Cambiar la versión en `scripts/download_dependencies.sh` **y** en `airflow/config/enums.py`, y volver a ejecutar la descarga. |
 | Limpieza de ejecuciones | Mensual | Cada ejecución crea los esquemas `input_<process_id>` y `output_<process_id>` y una carpeta en `output/`. Eliminar los que ya no se requieran (`DROP SCHEMA ... CASCADE`). |
