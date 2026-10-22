@@ -44,9 +44,9 @@ RUN set -eux; \
         qgis-plugin-grass \
         grass \
         gdal-bin \
-        temurin-${JAVA_MAJOR}-jre; \
+        "temurin-${JAVA_MAJOR}-jre"; \
     JAVA_REAL_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
-    ln -sfn "${JAVA_REAL_HOME}" /opt/java-${JAVA_MAJOR}; \
+    ln -sfn "${JAVA_REAL_HOME}" "/opt/java-${JAVA_MAJOR}"; \
     install -d -o airflow -g root -m 0700 /tmp/runtime-airflow; \
     install -d -o airflow -g root -m 0775 /tmp/matplotlib; \
     apt-get autoremove -yqq --purge; \
