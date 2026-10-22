@@ -280,16 +280,18 @@ def _register_secrets_for_masking(
         normalized_name = parameter_name.lower()
 
         if (
-            normalized_name in SENSITIVE_PARAMETER_NAMES
-            or normalized_name.endswith("_password")
-            or normalized_name.endswith("_secret")
-            or normalized_name.endswith("_token")
+            (
+                normalized_name in SENSITIVE_PARAMETER_NAMES
+                or normalized_name.endswith("_password")
+                or normalized_name.endswith("_secret")
+                or normalized_name.endswith("_token")
+            )
+            and parameter_value not in (None, "")
         ):
-            if parameter_value not in (None, ""):
-                mask_secret(
-                    parameter_value,
-                    name=parameter_name,
-                )
+            mask_secret(
+                parameter_value,
+                name=parameter_name,
+            )
 
 
 def _model_display_name(
