@@ -37,13 +37,13 @@ RUN set -eux; \
         > /etc/apt/sources.list.d/adoptium.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        qgis \
-        qgis-providers \
-        python3-qgis \
-        qgis-provider-grass \
-        qgis-plugin-grass \
-        grass \
         gdal-bin \
+        grass \
+        python3-qgis \
+        qgis \
+        qgis-plugin-grass \
+        qgis-provider-grass \
+        qgis-providers \
         "temurin-${JAVA_MAJOR}-jre"; \
     JAVA_REAL_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
     ln -sfn "${JAVA_REAL_HOME}" "/opt/java-${JAVA_MAJOR}"; \
