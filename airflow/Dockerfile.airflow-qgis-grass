@@ -71,17 +71,13 @@ p.mkdir(parents=True, exist_ok=True); \
 
 COPY --chown=airflow:root requirements.txt /tmp/requirements.txt
 
-RUN pip install --no-cache-dir --only-binary :all: \
+# Instalamos dependencias Python y verificamos Airflow, QGIS, Java y GRASS
+# en una sola instrucción RUN para reducir capas.
+RUN set -eux; \
+    pip install --no-cache-dir --only-binary :all: \
         "apache-airflow==${AIRFLOW_VERSION}" \
         -r /tmp/requirements.txt \
-        --constraint "${HOME}/constraints.txt"
-
-# WORKDIR /opt/airflow
-
-# COPY --chown=airflow:root dags/ /opt/airflow/dags/
-# COPY --chown=airflow:root utils/ /opt/airflow/utils/
-
-RUN set -eux; \
+        --constraint "${HOME}/constraints.txt"; \
     test "$(airflow version)" = "${AIRFLOW_VERSION}"; \
     python -c "import sys; \
 from qgis.core import Qgis; \
@@ -92,10 +88,7 @@ assert Qgis.QGIS_VERSION.startswith('${QGIS_SERIES}.')"; \
     ! grep -q 'Python support will be disabled' /tmp/qgis-process-list.txt; \
     grep -q 'native:' /tmp/qgis-process-list.txt; \
     rm -f /tmp/qgis-process-list.txt; \
-    java -version
-
-
-RUN set -eux; \
+    java -version; \
     command -v grass; \
     grass --version; \
     qgis_process plugins enable grassprovider; \
