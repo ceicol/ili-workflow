@@ -11,8 +11,8 @@ USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
-        wget \
         gpg \
+        wget \
     && wget --https-only -qO- \
         https://packages.adoptium.net/artifactory/api/gpg/key/public \
         | gpg --dearmor --batch --yes \
